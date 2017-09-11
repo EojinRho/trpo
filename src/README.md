@@ -4,59 +4,12 @@ By Patrick Coady: [Learning Artificial Intelligence](https://learningai.io/)
 
 (hardmaru cloned the original repo and added support for roboschool, and saving model weights so they can be played back later using `python demo.py path_to_json`.)
 
-### Summary
+Link to original [repo](https://github.com/pat-coady/trpo).
 
-The same learning algorithm was used to train agents for each of the ten OpenAI Gym MuJoCo continuous control environments. The only difference between evaluations was the number of episodes used per training batch, otherwise all options were the same. The exact code used to generate the OpenAI Gym submissions is in the **`aigym_evaluation`** branch.
+I have been able to use Pat's PPO implementation to train on OpenAI's [roboschool](https://blog.openai.com/roboschool/) environments (which are open source, and don't require mujoco). They are also tougher to train compared to the original environments. I have also made it work for pybullet's [environments](pybullet.org) as well (such as the racecar and minitaur).
 
-Here are the key points:
+A few changes:
 
-* Proximal Policy Optimization (similar to TRPO, but uses gradient descent with KL loss terms)  \[1\] \[2\]
-* Value function approximated with 3 hidden-layer NN (tanh activations):
-    * hid1 size = obs_dim x `NET_SIZE_FACTOR`
-    * hid2 size = geometric mean of hid1 and hid3 sizes
-    * hid3 size = 5
-* Policy is a multi-variate Gaussian parameterized by a 3 hidden-layer NN (tanh activations):
-    * hid1 size = obs_dim x `NET_SIZE_FACTOR`
-    * hid2 size = geometric mean of hid1 and hid3 sizes
-    * hid3 size = action_dim x `NET_SIZE_FACTOR`
-    * Diagonal covariance matrix variables are separately trained
-* Generalized Advantage Estimation (gamma = 0.995, lambda = 0.98) \[3\] \[4\]
-* ADAM optimizer used for both neural networks
-* The policy is evaluated for 20 episodes between updates, except:
-    * 50 episodes for Reacher
-    * 5 episodes for Swimmer
-    * 5 episodes for HalfCheetah
-    * 5 episodes for HumanoidStandup
-* Value function is trained on current batch + previous batch
-* KL loss factor and ADAM learning rate are dynamically adjusted during training
-* Policy and Value NNs built with TensorFlow
-
-## Dependencies
-
-* Python 3.5
-* The Usual Suspects: NumPy, matplotlib, scipy
-* TensorFlow
-* gym - [installation instructions](https://gym.openai.com/docs)
-* [MuJoCo](http://www.mujoco.org/) (30-day trial available and free to students)
-
-### Results can be reproduced as follows:
-
-```
-./train.py Reacher-v1 -n 60000 -b 50
-./train.py InvertedPendulum-v1
-./train.py InvertedDoublePendulum-v1 -n 12000
-./train.py Swimmer-v1 -n 2500 -b 5
-./train.py Hopper-v1 -n 30000
-./train.py HalfCheetah-v1 -n 3000 -b 5
-./train.py Walker2d-v1 -n 25000
-./train.py Ant-v1 -n 100000
-./train.py Humanoid-v1 -n 200000
-./train.py HumanoidStandup-v1 -n 200000 -b 5
-```
-
-### References
-
-1. [Trust Region Policy Optimization](https://arxiv.org/pdf/1502.05477.pdf) (Schulman et al., 2016)
-2. [Emergence of Locomotion Behaviours in Rich Environments](https://arxiv.org/pdf/1707.02286.pdf) (Heess et al., 2017)
-3. [High-Dimensional Continuous Control Using Generalized Advantage Estimation](https://arxiv.org/pdf/1506.02438.pdf) (Schulman et al., 2016)
-4. [GitHub Repository with several helpful implementation ideas](https://github.com/joschu/modular_rl) (Schulman)
+- rather than using a factor of 10 to decide size of net, it is a hyperparameter for train.py, and I found using a factor of 5 to be sufficient for most roboschool tasks.
+- I made the log_std bias term a hyperparameter (it was originally set to -1.0). I noticed that making it -0.5 or even 0.0 helps with the exploration for tougher tasks. If it is set to -1.0, roboschool's harder version of walker2d and hopper won't train. It gets stuck at standing around the starting position.
+- `python demo.py zoo/humanoid.json` is used to playback trained models (dumped as .json weights). I was able to use PPO to train the roboschool humanoid, ant, reacher, bipedhard, etc, and put the final set of weights in the `zoo` directory to play back afterwards. `demo.py` is independent of TensorFlow, and is a pure `numpy` implementation of the feed forward network policy.
