@@ -4,6 +4,7 @@ Logging and Data Scaling Utilities
 Written by Patrick Coady (pat-coady.github.io)
 """
 import numpy as np
+import json
 import os
 import shutil
 import glob
@@ -68,6 +69,10 @@ class Logger(object):
             now: unique sub-directory name (e.g. date/time string)
         """
         path = os.path.join('log-files', logname, now)
+        self.base_path = path
+        self.model_count = 0
+        self.model = None
+        self.env_name = logname
         os.makedirs(path)
         filenames = glob.glob('*.py')  # put copy of all python files in log_dir
         for filename in filenames:     # for reference
@@ -87,14 +92,27 @@ class Logger(object):
             display: boolean, print to stdout
         """
         if display:
+            print(self.env_name)
+            print(os.path.join(self.base_path, 'model.'+str(self.model_count)+'.json'))
             self.disp(self.log_entry)
         if self.write_header:
             fieldnames = [x for x in self.log_entry.keys()]
             self.writer = csv.DictWriter(self.f, fieldnames=fieldnames)
             self.writer.writeheader()
             self.write_header = False
+
+        # write model
+        if self.model and self.model_count % 25 == 0:
+          model_file_path = os.path.join(self.base_path, 'model.'+str(self.model_count)+'.json')
+          mf = open(model_file_path, 'wt')
+          json.dump(self.model, mf, indent=0, separators=(',', ':'))
+          mf.close()
+        self.model_count += 1
+        self.model = None
+
         self.writer.writerow(self.log_entry)
         self.log_entry = {}
+        self.model = None
 
     @staticmethod
     def disp(log):
@@ -115,6 +133,14 @@ class Logger(object):
             items: dictionary of items to update
         """
         self.log_entry.update(items)
+
+    def log_model(self, model_list):
+        """ stores the model (as a python list of names and param values)
+
+        Args:
+            model_list: list of param names and values
+        """
+        self.model = model_list
 
     def close(self):
         """ Close log file - log cannot be written after this """

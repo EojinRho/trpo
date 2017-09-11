@@ -9,7 +9,7 @@ import tensorflow as tf
 
 class Policy(object):
     """ NN-based policy approximation """
-    def __init__(self, obs_dim, act_dim, kl_targ):
+    def __init__(self, obs_dim, act_dim, kl_targ, net_size_factor=10, noise_bias=-1.0):
         """
         Args:
             obs_dim: num observation dimensions (int)
@@ -24,6 +24,8 @@ class Policy(object):
         self.lr_multiplier = 1.0  # dynamically adjust lr when D_KL out of control
         self.obs_dim = obs_dim
         self.act_dim = act_dim
+        self.net_size_factor = net_size_factor
+        self.noise_bias = noise_bias
         self._build_graph()
         self._init_session()
 
@@ -62,8 +64,8 @@ class Policy(object):
          for each action dimension (i.e. variances not determined by NN).
         """
         # hidden layer sizes determined by obs_dim and act_dim (hid2 is geometric mean)
-        hid1_size = self.obs_dim * 10  # 10 empirically determined
-        hid3_size = self.act_dim * 10  # 10 empirically determined
+        hid1_size = self.obs_dim * self.net_size_factor  # 10 empirically determined
+        hid3_size = self.act_dim * self.net_size_factor  # 10 empirically determined
         hid2_size = int(np.sqrt(hid1_size * hid3_size))
         # heuristic to set learning rate based on NN size (tuned on 'Hopper-v1')
         self.lr = 9e-4 / np.sqrt(hid2_size)  # 9e-4 empirically determined
@@ -82,10 +84,10 @@ class Policy(object):
                                          stddev=np.sqrt(1 / hid3_size)), name="means")
         # logvar_speed is used to 'fool' gradient descent into making faster updates
         # to log-variances. heuristic sets logvar_speed based on network size.
-        logvar_speed = (10 * hid3_size) // 48
+        logvar_speed = (self.net_size_factor * hid3_size) // 48
         log_vars = tf.get_variable('logvars', (logvar_speed, self.act_dim), tf.float32,
                                    tf.constant_initializer(0.0))
-        self.log_vars = tf.reduce_sum(log_vars, axis=0) - 1.0
+        self.log_vars = tf.reduce_sum(log_vars, axis=0) + self.noise_bias
 
         print('Policy Params -- h1: {}, h2: {}, h3: {}, lr: {:.3g}, logvar_speed: {}'
               .format(hid1_size, hid2_size, hid3_size, self.lr, logvar_speed))
@@ -160,7 +162,7 @@ class Policy(object):
 
         return self.sess.run(self.sampled_act, feed_dict=feed_dict)
 
-    def update(self, observes, actions, advantages, logger):
+    def update(self, observes, actions, advantages, logger, scaler):
         """ Update policy based on observations, actions and advantages
 
         Args:
@@ -201,6 +203,28 @@ class Policy(object):
                     'KL': kl,
                     'Beta': self.beta,
                     '_lr_multiplier': self.lr_multiplier})
+
+        # store weights
+        scales, offsets = scaler.get()
+        scales = scales.tolist()
+        offsets = offsets.tolist()
+        model_list_names, model_list_params = self.get_model_as_list()
+        env_name = logger.env_name
+        model_list = [env_name, [scales, offsets], [model_list_names, model_list_params], self.noise_bias]
+        logger.log_model(model_list)
+
+    def get_model_as_list(self):
+        # get trainable params.
+        model_names = []
+        model_params = []
+        with self.g.as_default():
+            t_vars = tf.trainable_variables()
+            for var in t_vars:
+                param_name = var.name
+                params = self.sess.run(var).tolist()
+                model_names.append(param_name)
+                model_params.append(params)
+        return model_names, model_params
 
     def close_sess(self):
         """ Close TensorFlow session """

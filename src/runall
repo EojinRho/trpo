@@ -1,11 +1,17 @@
-xvfb-run -s "-screen 0 1400x900x24" /bin/bash
-nohup python3 train.py Reacher-v1 -n 60000 -b 50 > reacher.log 2>&1 &
-nohup python3 train.py InvertedPendulum-v1 > inverted_pendulum.log 2>&1 &
-nohup python3 train.py InvertedDoublePendulum-v1 -n 12000 > inverted_double_pendulum.log 2>&1 &
-nohup python3 train.py Swimmer-v1 -n 2500 -b 5 > swimmer.log 2>&1 &
-nohup python3 train.py Hopper-v1 -n 30000 > hopper.log 2>&1 &
-nohup python3 train.py HalfCheetah-v1 -n 3000 -b 5 > half_cheetah.log 2>&1 &
-nohup python3 train.py Walker2d-v1 -n 25000 > walker2d.log 2>&1 &
-nohup python3 train.py Ant-v1 -n 100000 > ant.log 2>&1 &
-nohup python3 train.py Humanoid-v1 -n 200000 > humanoid.log 2>&1 &
-nohup python3 train.py HumanoidStandup-v1 -n 200000 -b 5 > humanoid_standup.log 2>&1 &
+python train.py RoboschoolReacher-v1 -b 50 --num_episodes 200000 > reacher.log 2>&1 &
+sleep 2
+python train.py RoboschoolHopper-v1 --num_episodes 200000 > hopper.log 2>&1 &
+sleep 2
+python train.py RoboschoolWalker2d-v1 --num_episodes 200000 > walker2d.log 2>&1 &
+sleep 2
+python train.py RoboschoolAnt-v1 --num_episodes 400000 > ant.log 2>&1 &
+sleep 2
+python train.py RoboschoolAnt-v1 --num_episodes 300000 -f 5 > ant_lite.log 2>&1 &
+sleep 2
+python train.py RoboschoolHumanoid-v1 --num_episodes 800000 > humanoid.log 2>&1 &
+sleep 2
+python train.py RoboschoolHumanoid-v1 --num_episodes 800000 -n -0.5 > humanoid_noisy.log 2>&1 &
+sleep 2
+python train.py RoboschoolHumanoid-v1 --num_episodes 600000 -f 5 > humanoid_lite.log 2>&1 &
+sleep 2
+python train.py RoboschoolHumanoid-v1 --num_episodes 800000 -f 5 -n -0.5 > humanoid_lite_noisy.log 2>&1 &

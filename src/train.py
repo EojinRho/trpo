@@ -26,6 +26,7 @@ in the OpenAI Gym (https://gym.openai.com/). Testing was focused on
 the MuJoCo control tasks.
 """
 import gym
+from env import make_env
 import numpy as np
 from gym import wrappers
 from policy import Policy
@@ -62,7 +63,8 @@ def init_gym(env_name):
         number of observation dimensions (int)
         number of action dimensions (int)
     """
-    env = gym.make(env_name)
+    #env = gym.make(env_name)
+    env = make_env(env_name)
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]
 
@@ -95,6 +97,7 @@ def run_episode(env, policy, scaler, animate=False):
     while not done:
         if animate:
             env.render()
+        if isinstance(obs, list): obs = np.array(obs)
         obs = obs.astype(np.float32).reshape((1, -1))
         obs = np.append(obs, [[step]], axis=1)  # add time step feature
         unscaled_obs.append(obs)
@@ -103,6 +106,8 @@ def run_episode(env, policy, scaler, animate=False):
         action = policy.sample(obs).reshape((1, -1)).astype(np.float32)
         actions.append(action)
         obs, reward, done, _ = env.step(np.squeeze(action, axis=0))
+        if isinstance(reward, int):
+            reward = float(reward)
         if not isinstance(reward, float):
             reward = np.asscalar(reward)
         rewards.append(reward)
@@ -260,7 +265,7 @@ def log_batch_stats(observes, actions, advantages, disc_sum_rew, logger, episode
                 })
 
 
-def main(env_name, num_episodes, gamma, lam, kl_targ, batch_size):
+def main(env_name, num_episodes, gamma, lam, kl_targ, batch_size, net_size_factor, noise_bias):
     """ Main training loop
 
     Args:
@@ -277,10 +282,10 @@ def main(env_name, num_episodes, gamma, lam, kl_targ, batch_size):
     now = datetime.utcnow().strftime("%b-%d_%H:%M:%S")  # create unique directories
     logger = Logger(logname=env_name, now=now)
     aigym_path = os.path.join('/tmp', env_name, now)
-    env = wrappers.Monitor(env, aigym_path, force=True)
+    # env = wrappers.Monitor(env, aigym_path, force=True)
     scaler = Scaler(obs_dim)
-    val_func = NNValueFunction(obs_dim)
-    policy = Policy(obs_dim, act_dim, kl_targ)
+    val_func = NNValueFunction(obs_dim, net_size_factor=net_size_factor)
+    policy = Policy(obs_dim, act_dim, kl_targ, net_size_factor=net_size_factor, noise_bias=noise_bias)
     # run a few episodes of untrained policy to initialize scaler:
     run_policy(env, policy, scaler, logger, episodes=5)
     episode = 0
@@ -294,7 +299,7 @@ def main(env_name, num_episodes, gamma, lam, kl_targ, batch_size):
         observes, actions, advantages, disc_sum_rew = build_train_set(trajectories)
         # add various stats to training log:
         log_batch_stats(observes, actions, advantages, disc_sum_rew, logger, episode)
-        policy.update(observes, actions, advantages, logger)  # update policy
+        policy.update(observes, actions, advantages, logger, scaler)  # update policy
         val_func.fit(observes, disc_sum_rew, logger)  # update value function
         logger.write(display=True)  # write logger results to file and stdout
         if killer.kill_now:
@@ -310,8 +315,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=('Train policy on OpenAI Gym environment '
                                                   'using Proximal Policy Optimizer'))
     parser.add_argument('env_name', type=str, help='OpenAI Gym environment name')
-    parser.add_argument('-n', '--num_episodes', type=int, help='Number of episodes to run',
-                        default=1000)
+    parser.add_argument('--num_episodes', type=int, help='Number of episodes to run',
+                        default=1000000000)
     parser.add_argument('-g', '--gamma', type=float, help='Discount factor', default=0.995)
     parser.add_argument('-l', '--lam', type=float, help='Lambda for Generalized Advantage Estimation',
                         default=0.98)
@@ -320,6 +325,9 @@ if __name__ == "__main__":
     parser.add_argument('-b', '--batch_size', type=int,
                         help='Number of episodes per training batch',
                         default=20)
+    parser.add_argument('-f', '--net_size_factor', type=int, help='Factor controlling size of network',
+                        default=5)
+    parser.add_argument('--noise_bias', type=float, help='noise bias', default=-1.0)
 
     args = parser.parse_args()
     main(**vars(args))
