@@ -30,14 +30,17 @@ from env import make_env
 import numpy as np
 from gym import wrappers
 from policy import Policy
+from policy_ppo_clipped import PolicyClip
+from policy_continue import PolicyContinue
 from value_function import NNValueFunction
+from value_function_continue import NNValueFunctionContinue
 import scipy.signal
 from utils import Logger, Scaler
 from datetime import datetime
 import os
 import argparse
 import signal
-
+import pickle
 
 class GracefulKiller:
     """ Gracefully exit program on CTRL-C """
@@ -71,7 +74,7 @@ def init_gym(env_name):
     return env, obs_dim, act_dim
 
 
-def run_episode(env, policy, scaler, animate=False):
+def run_episode(env, policy, scaler, animate=True):
     """ Run single episode with option to animate
 
     Args:
@@ -103,7 +106,10 @@ def run_episode(env, policy, scaler, animate=False):
         unscaled_obs.append(obs)
         obs = (obs - offset) * scale  # center and scale observations
         observes.append(obs)
+        #print(obs)
         action = policy.sample(obs).reshape((1, -1)).astype(np.float32)
+        #print(action)
+        #assert False
         actions.append(action)
         obs, reward, done, _ = env.step(np.squeeze(action, axis=0))
         if isinstance(reward, int):
@@ -265,7 +271,7 @@ def log_batch_stats(observes, actions, advantages, disc_sum_rew, logger, episode
                 })
 
 
-def main(env_name, num_episodes, gamma, lam, kl_targ, batch_size, net_size_factor, noise_bias):
+def main(env_name, num_episodes, gamma, lam, kl_targ, batch_size, net_size_factor, noise_bias, weight, use_ppoclip):
     """ Main training loop
 
     Args:
@@ -279,13 +285,28 @@ def main(env_name, num_episodes, gamma, lam, kl_targ, batch_size, net_size_facto
     killer = GracefulKiller()
     env, obs_dim, act_dim = init_gym(env_name)
     obs_dim += 1  # add 1 to obs dimension for time step feature (see run_episode())
-    now = datetime.utcnow().strftime("%b-%d_%H:%M:%S")  # create unique directories
+    # now = datetime.utcnow().strftime("%b-%d_%H:%M:%S")  # create unique directories
+    now = datetime.now().strftime("%b-%d_%H:%M:%S")
     logger = Logger(logname=env_name, now=now)
     aigym_path = os.path.join('/tmp', env_name, now)
     # env = wrappers.Monitor(env, aigym_path, force=True)
     scaler = Scaler(obs_dim)
-    val_func = NNValueFunction(obs_dim, net_size_factor=net_size_factor)
-    policy = Policy(obs_dim, act_dim, kl_targ, net_size_factor=net_size_factor, noise_bias=noise_bias)
+    if weight == "None":
+        val_func = NNValueFunction(obs_dim, net_size_factor=net_size_factor)
+        policy = None
+        if use_ppoclip == "False":
+            policy = Policy(obs_dim, act_dim, kl_targ, net_size_factor=net_size_factor, noise_bias=noise_bias)
+        elif use_ppoclip == "True":
+            policy = PolicyClip(obs_dim, act_dim, kl_targ, net_size_factor=net_size_factor, noise_bias=noise_bias)
+            #assert False, "Not tested"
+        else :
+            assert False, "Unreachable"
+    else:
+        token = weight.split(".")
+        token[-3] = token[-3][:-5] + "value"
+        weight_2 = ".".join(token)
+        val_func = NNValueFunctionContinue(weight_2, obs_dim, net_size_factor=net_size_factor)
+        policy = PolicyContinue(weight, obs_dim, act_dim, kl_targ, net_size_factor=net_size_factor, noise_bias=noise_bias)
     # run a few episodes of untrained policy to initialize scaler:
     run_policy(env, policy, scaler, logger, episodes=5)
     episode = 0
@@ -307,6 +328,8 @@ def main(env_name, num_episodes, gamma, lam, kl_targ, batch_size, net_size_facto
                 break
             killer.kill_now = False
     logger.close()
+    # with open("test_dump", 'w') as f:
+    #     pickle.dump(policy, f)
     policy.close_sess()
     val_func.close_sess()
 
@@ -328,6 +351,8 @@ if __name__ == "__main__":
     parser.add_argument('-f', '--net_size_factor', type=int, help='Factor controlling size of network',
                         default=5)
     parser.add_argument('--noise_bias', type=float, help='noise bias', default=-1.0)
+    parser.add_argument('--weight', type=str, help='File for pretrained weights', default="None")
+    parser.add_argument('--use_ppoclip', type=str, help="PPO implementation of clipped surrogate", default="False")
 
     args = parser.parse_args()
     main(**vars(args))

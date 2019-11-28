@@ -72,6 +72,7 @@ class Logger(object):
         self.base_path = path
         self.model_count = 0
         self.model = None
+        self.model_2 = None
         self.env_name = logname
         os.makedirs(path)
         filenames = glob.glob('*.py')  # put copy of all python files in log_dir
@@ -107,12 +108,19 @@ class Logger(object):
           mf = open(model_file_path, 'wt')
           json.dump(self.model, mf, indent=0, separators=(',', ':'))
           mf.close()
+
+          model_file_path_2 = os.path.join(self.base_path, 'value.'+str(self.model_count)+'.json')
+          mf = open(model_file_path_2, 'wt')
+          json.dump(self.model_2, mf, indent=0, separators=(',', ':'))
+          mf.close()
+
         self.model_count += 1
         self.model = None
 
         self.writer.writerow(self.log_entry)
         self.log_entry = {}
         self.model = None
+        self.model_2 = None
 
     @staticmethod
     def disp(log):
@@ -141,6 +149,14 @@ class Logger(object):
             model_list: list of param names and values
         """
         self.model = model_list
+
+    def log_model_2(self, model_list):
+        """ stores the model (as a python list of names and param values)
+
+        Args:
+            model_list: list of param names and values
+        """
+        self.model_2 = model_list
 
     def close(self):
         """ Close log file - log cannot be written after this """

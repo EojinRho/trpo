@@ -7,11 +7,12 @@ Written by Patrick Coady (pat-coady.github.io)
 import tensorflow as tf
 import numpy as np
 from sklearn.utils import shuffle
+import json
 
 
-class NNValueFunction(object):
+class NNValueFunctionContinue(object):
     """ NN-based state-value function """
-    def __init__(self, obs_dim, net_size_factor=10):
+    def __init__(self, filename, obs_dim, net_size_factor=10):
         """
         Args:
             obs_dim: number of dimensions in observation vector (int)
@@ -22,6 +23,19 @@ class NNValueFunction(object):
         self.epochs = 10
         self.net_size_factor = net_size_factor
         self.lr = None  # learning rate set in _build_graph()
+
+        with open(filename) as f:
+            data = json.load(f)
+
+        self.w0 = np.array(data[0][1][0])
+        self.b0 = np.array(data[0][1][1])
+        self.w1 = np.array(data[0][1][2])
+        self.b1 = np.array(data[0][1][3])
+        self.w2 = np.array(data[0][1][4])
+        self.b2 = np.array(data[0][1][5])
+        self.w3 = np.array(data[0][1][6])
+        self.b3 = np.array(data[0][1][7])
+
         self._build_graph()
 
         config = tf.ConfigProto()
@@ -44,18 +58,22 @@ class NNValueFunction(object):
             print('Value Params -- h1: {}, h2: {}, h3: {}, lr: {:.3g}'
                   .format(hid1_size, hid2_size, hid3_size, self.lr))
             # 3 hidden layers with tanh activations
+            init_w = tf.constant_initializer(self.w0)
+            init_b = tf.constant_initializer(self.b0)
             out = tf.layers.dense(self.obs_ph, hid1_size, tf.tanh,
-                                  kernel_initializer=tf.random_normal_initializer(
-                                      stddev=np.sqrt(1 / self.obs_dim)), name="h1")
+                                  kernel_initializer=init_w, bias_initializer=init_b, name="h1")
+            init_w = tf.constant_initializer(self.w1)
+            init_b = tf.constant_initializer(self.b1)
             out = tf.layers.dense(out, hid2_size, tf.tanh,
-                                  kernel_initializer=tf.random_normal_initializer(
-                                      stddev=np.sqrt(1 / hid1_size)), name="h2")
+                               kernel_initializer=init_w, bias_initializer=init_b, name="h2")
+            init_w = tf.constant_initializer(self.w2)
+            init_b = tf.constant_initializer(self.b2)
             out = tf.layers.dense(out, hid3_size, tf.tanh,
-                                  kernel_initializer=tf.random_normal_initializer(
-                                      stddev=np.sqrt(1 / hid2_size)), name="h3")
+                               kernel_initializer=init_w, bias_initializer=init_b, name="h3")
+            init_w = tf.constant_initializer(self.w3)
+            init_b = tf.constant_initializer(self.b3)
             out = tf.layers.dense(out, 1,
-                                  kernel_initializer=tf.random_normal_initializer(
-                                      stddev=np.sqrt(1 / hid3_size)), name='output')
+                               kernel_initializer=init_w, bias_initializer=init_b, name="output")
             self.out = tf.squeeze(out)
             self.loss = tf.reduce_mean(tf.square(self.out - self.val_ph))  # squared loss
             optimizer = tf.train.AdamOptimizer(self.lr)

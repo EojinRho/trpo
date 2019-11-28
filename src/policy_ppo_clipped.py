@@ -7,7 +7,7 @@ import numpy as np
 import tensorflow as tf
 
 
-class Policy(object):
+class PolicyClip(object):
     """ NN-based policy approximation """
     def __init__(self, obs_dim, act_dim, kl_targ, net_size_factor=10, noise_bias=-1.0):
         """
@@ -143,11 +143,19 @@ class Policy(object):
 
         See: https://arxiv.org/pdf/1707.02286.pdf
         """
-        loss1 = -tf.reduce_mean(self.advantages_ph *
-                                tf.exp(self.logp - self.logp_old))
-        loss2 = tf.reduce_mean(self.beta_ph * self.kl)
-        loss3 = self.eta_ph * tf.square(tf.maximum(0.0, self.kl - 2.0 * self.kl_targ))
-        self.loss = loss1 + loss2 + loss3
+        #loss1 = -tf.reduce_mean(self.advantages_ph *
+        #                        tf.exp(self.logp - self.logp_old))
+        #loss2 = tf.reduce_mean(self.beta_ph * self.kl)
+        #loss3 = self.eta_ph * tf.square(tf.maximum(0.0, self.kl - 2.0 * self.kl_targ))
+
+        clip_param = 0.2
+
+        ratio = tf.exp(self.logp - self.logp_old)
+        surr1 = ratio * self.advantages_ph
+        surr2 = tf.clip_by_value(ratio, 1.0 - clip_param, 1.0 + clip_param) * self.advantages_ph
+        pol_surr = -tf.reduce_mean(tf.minimum(surr1, surr2))
+
+        self.loss = pol_surr
         optimizer = tf.train.AdamOptimizer(self.lr_ph)
         self.train_op = optimizer.minimize(self.loss)
 
@@ -155,7 +163,7 @@ class Policy(object):
         """Launch TensorFlow session and initialize variables"""
         config = tf.ConfigProto()
         config.gpu_options.per_process_gpu_memory_fraction = 0.3
-        self.sess = tf.Session(graph=self.g, config=config)
+        self.sess = tf.Session(graph=self.g,config=config)
         self.sess.run(self.init)
 
     def sample(self, obs):
@@ -178,7 +186,7 @@ class Policy(object):
                      self.advantages_ph: advantages,
                      self.beta_ph: self.beta,
                      self.eta_ph: self.eta,
-                     self.lr_ph: self.lr * self.lr_multiplier}
+                     self.lr_ph: self.lr}
         old_means_np, old_log_vars_np = self.sess.run([self.means, self.log_vars],
                                                       feed_dict)
         feed_dict[self.old_log_vars_ph] = old_log_vars_np

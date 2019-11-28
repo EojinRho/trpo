@@ -5,17 +5,18 @@ Written by Patrick Coady (pat-coady.github.io)
 """
 import numpy as np
 import tensorflow as tf
+import json
 
-
-class Policy(object):
+class PolicyContinue(object):
     """ NN-based policy approximation """
-    def __init__(self, obs_dim, act_dim, kl_targ, net_size_factor=10, noise_bias=-1.0):
+    def __init__(self, filename, obs_dim, act_dim, kl_targ, net_size_factor=10, noise_bias=-1.0):
         """
         Args:
             obs_dim: num observation dimensions (int)
             act_dim: num action dimensions (int)
             kl_targ: target KL divergence between pi_old and pi_new
         """
+        ## need to save beta and restore it
         self.beta = 1.0  # dynamically adjusted D_KL loss multiplier
         self.eta = 50  # multiplier for D_KL-kl_targ hinge-squared loss
         self.kl_targ = kl_targ
@@ -26,6 +27,27 @@ class Policy(object):
         self.act_dim = act_dim
         self.net_size_factor = net_size_factor
         self.noise_bias = noise_bias
+
+        with open(filename) as f:
+            data = json.load(f)
+
+        self.w0 = np.array(data[2][1][0])
+        self.b0 = np.array(data[2][1][1])
+        self.w1 = np.array(data[2][1][2])
+        self.b1 = np.array(data[2][1][3])
+        self.w2 = np.array(data[2][1][4])
+        self.b2 = np.array(data[2][1][5])
+        self.w3 = np.array(data[2][1][6])
+        self.b3 = np.array(data[2][1][7])
+
+        #self.beta = 5.0625
+
+        self.log_vars_init = np.array(data[2][1][8])
+        self.noise_bias_init = data[3]
+
+        #log_vars_temp = np.sum(self.log_vars_init, axis=0) + self.noise_bias
+        #self.sigma = np.exp(log_vars_temp / 2.0)
+
         self._build_graph()
         self._init_session()
 
@@ -70,24 +92,44 @@ class Policy(object):
         # heuristic to set learning rate based on NN size (tuned on 'Hopper-v1')
         self.lr = 9e-4 / np.sqrt(hid2_size)  # 9e-4 empirically determined
         # 3 hidden layers with tanh activations
+        init_w = tf.constant_initializer(self.w0)
+        init_b = tf.constant_initializer(self.b0)
         out = tf.layers.dense(self.obs_ph, hid1_size, tf.tanh,
-                              kernel_initializer=tf.random_normal_initializer(
-                                  stddev=np.sqrt(1 / self.obs_dim)), name="h1")
+                               kernel_initializer=init_w, bias_initializer=init_b, name="h1")
+        init_w = tf.constant_initializer(self.w1)
+        init_b = tf.constant_initializer(self.b1)
         out = tf.layers.dense(out, hid2_size, tf.tanh,
-                              kernel_initializer=tf.random_normal_initializer(
-                                  stddev=np.sqrt(1 / hid1_size)), name="h2")
+                               kernel_initializer=init_w, bias_initializer=init_b, name="h2")
+        init_w = tf.constant_initializer(self.w2)
+        init_b = tf.constant_initializer(self.b2)
         out = tf.layers.dense(out, hid3_size, tf.tanh,
-                              kernel_initializer=tf.random_normal_initializer(
-                                  stddev=np.sqrt(1 / hid2_size)), name="h3")
+                               kernel_initializer=init_w, bias_initializer=init_b, name="h3")
+        # with tf.compat.v1.variable_scope('h3', reuse=True):
+        #     init = tf.global_variables_initializer()
+        #     w = tf.compat.v1.get_variable('kernel')
+        #     with tf.Session() as sess:
+        #         sess.run(init)
+        #         print("self.w0 = {}".format(self.w2[0][:5]))
+        #         print("self.w1 = {}".format(w.eval()[0][:5]))
+        # assert False
+        init_w = tf.constant_initializer(self.w3)
+        init_b = tf.constant_initializer(self.b3)
         self.means = tf.layers.dense(out, self.act_dim,
-                                     kernel_initializer=tf.random_normal_initializer(
-                                         stddev=np.sqrt(1 / hid3_size)), name="means")
+                               kernel_initializer=init_w, bias_initializer=init_b, name="means")
         # logvar_speed is used to 'fool' gradient descent into making faster updates
         # to log-variances. heuristic sets logvar_speed based on network size.
         logvar_speed = (self.net_size_factor * hid3_size) // 48
+
+
+        log_vars = tf.get_variable('logvars', (logvar_speed, self.act_dim), tf.float32,
+                                   tf.constant_initializer(self.log_vars_init))
+        self.log_vars = tf.reduce_sum(log_vars, axis=0) + self.noise_bias_init
+        """
         log_vars = tf.get_variable('logvars', (logvar_speed, self.act_dim), tf.float32,
                                    tf.constant_initializer(0.0))
         self.log_vars = tf.reduce_sum(log_vars, axis=0) + self.noise_bias
+        """
+
 
         print('Policy Params -- h1: {}, h2: {}, h3: {}, lr: {:.3g}, logvar_speed: {}'
               .format(hid1_size, hid2_size, hid3_size, self.lr, logvar_speed))
