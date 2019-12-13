@@ -184,7 +184,7 @@ class PolicyWithVariance(object):
     def _init_session(self):
         """Launch TensorFlow session and initialize variables"""
         config = tf.ConfigProto()
-        config.gpu_options.per_process_gpu_memory_fraction = 0.3
+        config.gpu_options.per_process_gpu_memory_fraction = 0.25
         self.sess = tf.Session(graph=self.g, config=config)
         self.sess.run(self.init)
 

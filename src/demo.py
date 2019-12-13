@@ -130,7 +130,7 @@ def simulate(model, train_mode=False, render_mode=True, num_episode=5, seed=-1):
 
       action = model.get_action(obs.flatten())
 
-      obs, reward, done, _ = model.env.step(action)
+      obs, reward, done, _, rewards = model.env.step(action)
 
       #if (render_mode):
       #  print("step reward", reward)

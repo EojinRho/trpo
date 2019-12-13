@@ -154,7 +154,7 @@ class Policy(object):
     def _init_session(self):
         """Launch TensorFlow session and initialize variables"""
         config = tf.ConfigProto()
-        config.gpu_options.per_process_gpu_memory_fraction = 0.3
+        config.gpu_options.per_process_gpu_memory_fraction = 0.25
         self.sess = tf.Session(graph=self.g, config=config)
         self.sess.run(self.init)
 
@@ -212,7 +212,7 @@ class Policy(object):
         offsets = offsets.tolist()
         model_list_names, model_list_params = self.get_model_as_list()
         env_name = logger.env_name
-        model_list = [env_name, [scales, offsets], [model_list_names, model_list_params], self.noise_bias]
+        model_list = [env_name, [scales, offsets], [model_list_names, model_list_params], self.noise_bias, self.beta]
         logger.log_model(model_list)
 
     def get_model_as_list(self):

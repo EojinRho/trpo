@@ -73,6 +73,7 @@ class Logger(object):
         self.model_count = 0
         self.model = None
         self.model_2 = None
+        self.model_3 = None
         self.env_name = logname
         os.makedirs(path)
         filenames = glob.glob('*.py')  # put copy of all python files in log_dir
@@ -104,15 +105,22 @@ class Logger(object):
 
         # write model
         if self.model and self.model_count % 25 == 0:
-          model_file_path = os.path.join(self.base_path, 'model.'+str(self.model_count)+'.json')
-          mf = open(model_file_path, 'wt')
-          json.dump(self.model, mf, indent=0, separators=(',', ':'))
-          mf.close()
+            model_file_path = os.path.join(self.base_path, 'model.'+str(self.model_count)+'.json')
+            mf = open(model_file_path, 'wt')
+            json.dump(self.model, mf, indent=0, separators=(',', ':'))
+            mf.close()
 
-          model_file_path_2 = os.path.join(self.base_path, 'value.'+str(self.model_count)+'.json')
-          mf = open(model_file_path_2, 'wt')
-          json.dump(self.model_2, mf, indent=0, separators=(',', ':'))
-          mf.close()
+            model_file_path_2 = os.path.join(self.base_path, 'value.'+str(self.model_count)+'.json')
+            mf = open(model_file_path_2, 'wt')
+            json.dump(self.model_2, mf, indent=0, separators=(',', ':'))
+            mf.close()
+
+            if self.model_3 != None:
+                model_file_path_3 = os.path.join(self.base_path, 'auto.csv')
+                mf = open(model_file_path_3, 'a')
+                mf.write("%d,%f,%f,%f,%f" % (self.model_count,  self.model_3["alive_coef"], self.model_3["progress_coef"],
+                                                                self.model_3["alive_sum"], self.model_3["progr_sum"]))
+                mf.close()
 
         self.model_count += 1
         self.model = None
@@ -121,14 +129,15 @@ class Logger(object):
         self.log_entry = {}
         self.model = None
         self.model_2 = None
+        self.model_3 = None
 
     @staticmethod
     def disp(log):
         """Print metrics to stdout"""
         log_keys = [k for k in log.keys()]
         log_keys.sort()
-        print('***** Episode {}, Mean R = {:.1f} *****'.format(log['_Episode'],
-                                                               log['_MeanReward']))
+        print('***** Episode {}, Mean R = {:.1f}, Adv = {:.2f}, Adv_Min = {:.2f} Adv_Max = {:.2f} *****'.format(log['_Episode'],
+                            log['_MeanReward'], log['_mean_adv'], log['_min_adv'], log['_max_adv']))
         for key in log_keys:
             if key[0] != '_':  # don't display log items with leading '_'
                 print('{:s}: {:.3g}'.format(key, log[key]))
@@ -157,6 +166,14 @@ class Logger(object):
             model_list: list of param names and values
         """
         self.model_2 = model_list
+
+    def log_model_3(self, model_list):
+        """ stores the model (as a python list of names and param values)
+
+        Args:
+            model_list: list of param names and values
+        """
+        self.model_3 = model_list
 
     def close(self):
         """ Close log file - log cannot be written after this """

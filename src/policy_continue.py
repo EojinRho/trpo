@@ -40,10 +40,10 @@ class PolicyContinue(object):
         self.w3 = np.array(data[2][1][6])
         self.b3 = np.array(data[2][1][7])
 
-        #self.beta = 5.0625
-
         self.log_vars_init = np.array(data[2][1][8])
         self.noise_bias_init = data[3]
+
+        self.beta = data[4]
 
         #log_vars_temp = np.sum(self.log_vars_init, axis=0) + self.noise_bias
         #self.sigma = np.exp(log_vars_temp / 2.0)
@@ -196,7 +196,7 @@ class PolicyContinue(object):
     def _init_session(self):
         """Launch TensorFlow session and initialize variables"""
         config = tf.ConfigProto()
-        config.gpu_options.per_process_gpu_memory_fraction = 0.3
+        config.gpu_options.per_process_gpu_memory_fraction = 0.25
         self.sess = tf.Session(graph=self.g, config=config)
         self.sess.run(self.init)
 
@@ -254,7 +254,7 @@ class PolicyContinue(object):
         offsets = offsets.tolist()
         model_list_names, model_list_params = self.get_model_as_list()
         env_name = logger.env_name
-        model_list = [env_name, [scales, offsets], [model_list_names, model_list_params], self.noise_bias]
+        model_list = [env_name, [scales, offsets], [model_list_names, model_list_params], self.noise_bias, self.beta]
         logger.log_model(model_list)
 
     def get_model_as_list(self):
